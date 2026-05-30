@@ -44,9 +44,6 @@ no special plugins.
   programme guide from `xmltv.xml` (not displayed by default but
   available for clients that need it).
 
-- `.gitignore` – excludes temporary build artifacts, logs and
-  segments from version control.  Only source code and HTML are
-  intended to be tracked in git.
 
 ## How it works
 
