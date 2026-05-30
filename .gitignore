@@ -1,0 +1,21 @@
+# Ignore build artefacts and temporary files
+
+# HLS segments and playlists
+channel-live/
+channel-stage/
+
+# Work directory and logs
+builder/work/
+builder/tmp_parts/
+builder/logs/
+
+# Plans and concat lists
+builder/plan.csv
+builder/concat.txt
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
