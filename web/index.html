@@ -1,11 +1,13 @@
 
 
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Retro Stream Player</title>
+<title>Toonami After Hours</title>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
@@ -415,15 +417,15 @@ video {
 <body>
  <main class="stage">
  <div class="ambient"></div>
- <div class="channel-brand">Retro Stream Player</div>
+ <div class="channel-brand">Toonami After Hours</div>
 
- <section class="tv-shell" aria-label="Retro Stream Player live player">
+ <section class="tv-shell" aria-label="Toonami After Hours live player">
  <video id="video" autoplay muted controls playsinline></video>
  <button class="guide-button" id="guideButton" type="button">Guide</button>
  <div class="crt"></div>
  <div class="vignette"></div>
  <div class="status" id="status">Live</div>
- <div class="channel-label" id="channelLabel">Retro Stream</div>
+ <div class="channel-label" id="channelLabel">Toonami</div>
  </section>
  </main>
 
@@ -457,8 +459,8 @@ const guideOverlay = document.getElementById('guideOverlay');
 const guideContent = document.getElementById('guideContent');
 const guideUpdated = document.getElementById('guideUpdated');
 
-// Generated Retro Stream HLS endpoints.
-const streamBaseUrl = window.STREAM_BASE_URL || 'https://example.com/path-to-your-hls-stream';
+// Generated Toonami HLS endpoints.
+const streamBaseUrl = 'https://mbmedia.galatea.bysh.me/toonami-live';
 
 const videoSrc = `${streamBaseUrl}/index.m3u8`;
 const xmltvSrc = `${streamBaseUrl}/xmltv.xml`;
@@ -476,12 +478,13 @@ let guidePrograms = [];
 let currentBlockId = null;
 let currentVersion = null;
 let initialSyncApplied = false;
+let blockSwitchInProgress = false;
 let lastLiveSyncAt = 0;
 let lastStoredPositionAt = 0;
 
 const liveSyncCheckIntervalMs = 15000;
 const liveSyncDriftToleranceSeconds = 8;
-const localPlaybackKey = 'retro_stream_player_last_position';
+const localPlaybackKey = 'toonami_after_hours_last_position';
 
 function setStatus(text) {
     statusBadge.textContent = text;
@@ -498,6 +501,10 @@ function safePlay() {
 function cacheBust(url) {
     const separator = url.includes('?') ? '&' : '?';
     return `${url}${separator}t=${Date.now()}`;
+}
+
+function versionedVideoSrc() {
+    return cacheBust(`${videoSrc}?block=${encodeURIComponent(currentBlockId || Date.now())}`);
 }
 
 function fetchNoCache(url, options = {}) {
@@ -521,6 +528,46 @@ function schedulePageReload(reason, delayMs = 1200) {
     reloadTimer = setTimeout(function () {
         window.location.reload();
     }, delayMs);
+}
+
+async function switchToNewBlock(newVersion) {
+    if (blockSwitchInProgress) return;
+
+    blockSwitchInProgress = true;
+
+    try {
+        console.warn('Switching to new block without page reload.');
+
+        try {
+            localStorage.removeItem(localPlaybackKey);
+        } catch (error) {}
+
+        setStatus('Reloading');
+        setLabel('Loading new block...');
+
+        currentVersion = newVersion || currentVersion;
+        currentBlockId = currentVersion?.block_id || currentVersion?.generated_at || currentBlockId;
+        initialSyncApplied = false;
+        recoveryAttempts = 0;
+
+        destroyHls();
+
+        try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        } catch (error) {
+            console.warn('Could not reset video element:', error);
+        }
+
+        await loadGuide();
+        await initHlsPlayer();
+    } catch (error) {
+        console.error('Could not switch to new block cleanly:', error);
+        schedulePageReload('block switch recovery fallback');
+    } finally {
+        blockSwitchInProgress = false;
+    }
 }
 
 function destroyHls() {
@@ -790,16 +837,12 @@ async function checkVersion() {
         }
 
         if (blockId && blockId !== currentBlockId) {
-            console.warn('Detected new block version. Reloading page.', {
+            console.warn('Detected new block version. Switching player.', {
                 oldBlockId: currentBlockId,
                 newBlockId: blockId
             });
 
-            try {
-                localStorage.removeItem(localPlaybackKey);
-            } catch (error) {}
-
-            schedulePageReload('new block version detected', 1000);
+            await switchToNewBlock(data);
         }
     } catch (error) {
         console.error('Version monitor error:', error);
@@ -838,10 +881,10 @@ async function initHlsPlayer() {
     reloadTimer = null;
 
     setStatus('Loading');
-    setLabel('Loading generated Retro Stream stream...');
+    setLabel('Loading generated Toonami stream...');
 
     playlistHealthSrc = videoSrc;
-    console.info('Using configured HLS stream:', videoSrc);
+    console.info('Using generated HLS stream:', videoSrc);
 
     if (window.Hls && Hls.isSupported()) {
         destroyHls();
@@ -862,13 +905,13 @@ async function initHlsPlayer() {
             levelLoadingMaxRetryTimeout: 8000
         });
 
-        hls.loadSource(cacheBust(videoSrc));
+        hls.loadSource(versionedVideoSrc());
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
             recoveryAttempts = 0;
             setStatus('Live');
-            setLabel('Retro Stream');
+            setLabel('Toonami');
 
             if (!initialSyncApplied) {
                 initialSyncApplied = true;
@@ -916,11 +959,11 @@ async function initHlsPlayer() {
         });
 
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = cacheBust(videoSrc);
+        video.src = versionedVideoSrc();
 
         video.addEventListener('loadedmetadata', function () {
             setStatus('Live');
-            setLabel('Retro Stream');
+            setLabel('Toonami');
 
             if (!initialSyncApplied) {
                 initialSyncApplied = true;
@@ -945,7 +988,7 @@ async function initHlsPlayer() {
     video.addEventListener('playing', function () {
         recoveryAttempts = 0;
         setStatus('Live');
-        setLabel('Retro Stream');
+        setLabel('Toonami');
         seekToLiveOffset('playing event sync');
     });
 
@@ -1056,7 +1099,7 @@ async function loadGuide() {
 
         const guideChannelName = channels.find(function (channel) {
             return channel.id === guideChannelId;
-        })?.name || 'Retro Stream';
+        })?.name || 'Toonami';
 
         guideUpdated.textContent = `${guideChannelName} · Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
         renderGuide();
@@ -1183,5 +1226,7 @@ async function boot() {
 
 boot();
 </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a050fa94f9b8436b',t:'MTc4MDM0NTg1NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"cb9f8014b01b46fab18366e3d7baeb29","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0576b28ce275612',t:'MTc4MDQxMzM3OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"cb9f8014b01b46fab18366e3d7baeb29","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
